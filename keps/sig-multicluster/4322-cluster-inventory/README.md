@@ -498,6 +498,39 @@ object in each namespace.
 Within a cluster inventory, each member cluster SHOULD be represented by at most one
 ClusterProfile object, regardless of which cluster manager created it.
 
+Cluster managers SHOULD add the
+`multicluster.x-k8s.io/inventory-member-id` label when they create a
+ClusterProfile, using a value coordinated by the platform administrator. When
+set, the label MUST have a non-empty value.
+
+The platform administrator SHOULD ensure that, among all ClusterProfile
+objects stored in the same Kubernetes cluster, objects representing the same
+member cluster use the same value, and objects representing different member
+clusters use different values. Cluster managers SHOULD keep the value
+unchanged while a ClusterProfile continues to represent the same member
+cluster.
+
+ClusterProfile objects stored in the same Kubernetes cluster with the same
+non-empty `multicluster.x-k8s.io/inventory-member-id` value claim to represent
+the same member cluster. A consumer SHOULD deduplicate only among
+ClusterProfile objects selected by its configuration, such as inventory
+namespaces, label selectors, or object references, and only when its actions
+on those objects would conflict. Among objects with the same value in that
+set, the consumer SHOULD act only on the object with the oldest
+`creationTimestamp`; if two or more share it, the consumer SHOULD NOT act on
+any of them.
+
+If multiple ClusterProfile objects in the same inventory have the same
+non-empty `multicluster.x-k8s.io/inventory-member-id` value, the platform
+administrator SHOULD delete all but one. Consumers that select more than one
+of these objects, and whose actions on all of them would conflict, SHOULD
+surface a warning until the issue is resolved. The same value may appear in
+different inventories when the same member cluster belongs to each of them;
+those objects do not require deletion or a warning.
+Objects without the label are not correlated or deduplicated by this
+mechanism. An empty label value does not conform to this convention. A
+consumer that implements this deduplication MUST treat it as if the label were
+absent.
 
 ### Risks and Mitigations
 
@@ -512,6 +545,14 @@ How will UX be reviewed, and by whom?
 
 Consider including folks who also work outside the SIG or subproject.
 -->
+
+The ClusterProfile API does not enforce the inventory member ID conventions
+above. An absent, empty, conflicting, or unexpectedly changed value can cause
+consumers to treat one member cluster as multiple members or different member
+clusters as the same member. Deployments that require stronger guarantees can
+validate non-empty and stable values with a ValidatingAdmissionPolicy or an
+admission webhook; consistency across ClusterProfile objects remains the
+platform administrator's responsibility.
 
 Because of its interaction with authentication and credentials, particular
 attention in the access provider plugin design must be paid to security:
@@ -1013,6 +1054,7 @@ metadata:
  namespace: some-cluster-inventory
  labels:
    x-k8s.io/cluster-manager: some-cluster-manager
+   multicluster.x-k8s.io/inventory-member-id: cluster-us-east
 spec:
   displayName: cluster-us-east
   clusterManager:
@@ -1603,6 +1645,9 @@ Major milestones might include:
   objects in one namespace, scoped the ClusterProfile and cluster name
   uniqueness rules to the inventory, and defined cluster inventories
   independently of ClusterSet.
+- 2026-07-31: Defined the
+  `multicluster.x-k8s.io/inventory-member-id` label, duplicate ClusterProfile
+  handling within an inventory, and consumer deduplication across inventories.
 
 ## Drawbacks
 
